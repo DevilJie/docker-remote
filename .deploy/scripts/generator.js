@@ -115,7 +115,74 @@ export class Generator {
   }
 
   async generateNginxConfig(config) {
-    // Will be implemented in Task 10
+    logger.step('生成 nginx.conf...');
+
+    const { project } = config;
+    const lines = [];
+
+    lines.push('worker_processes auto;');
+    lines.push('error_log /var/log/nginx/error.log warn;');
+    lines.push('pid /var/run/nginx.pid;');
+    lines.push('');
+    lines.push('events {');
+    lines.push('    worker_connections 1024;');
+    lines.push('}');
+    lines.push('');
+    lines.push('http {');
+    lines.push('    include /etc/nginx/mime.types;');
+    lines.push('    default_type application/octet-stream;');
+    lines.push('');
+    lines.push('    log_format main \'$remote_addr - $remote_user [$time_local] "$request" \'');
+    lines.push('                      \'$status $body_bytes_sent "$http_referer" \'');
+    lines.push('                      \'"$http_user_agent" "$http_x_forwarded_for"\';');
+    lines.push('');
+    lines.push('    access_log /var/log/nginx/access.log main;');
+    lines.push('');
+    lines.push('    sendfile on;');
+    lines.push('    tcp_nopush on;');
+    lines.push('    keepalive_timeout 65;');
+    lines.push('    gzip on;');
+    lines.push('');
+    lines.push('    server {');
+    lines.push('        listen 80;');
+    lines.push('        server_name localhost;');
+    lines.push('');
+
+    // Frontend static files
+    if (project.frontend) {
+      lines.push('        # Frontend static files');
+      lines.push('        location / {');
+      lines.push('            root /var/www/html;');
+      lines.push('            index index.html;');
+      lines.push('            try_files $uri $uri/ /index.html;');
+      lines.push('        }');
+      lines.push('');
+    }
+
+    // Proxy locations
+    if (project.proxy) {
+      lines.push('        # Backend proxy');
+      for (const [proxyPath, proxyConfig] of Object.entries(project.proxy)) {
+        const port = project.backend?.port || 8080;
+
+        lines.push(`        location ${proxyPath} {`);
+        lines.push(`            proxy_pass http://127.0.0.1:${port};`);
+        lines.push('            proxy_set_header Host $host;');
+        lines.push('            proxy_set_header X-Real-IP $remote_addr;');
+        lines.push('            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
+        lines.push('            proxy_set_header X-Forwarded-Proto $scheme;');
+        lines.push('        }');
+        lines.push('');
+      }
+    }
+
+    lines.push('    }');
+    lines.push('}');
+
+    const nginxConf = lines.join('\n');
+    await fs.ensureDir(path.join(this.outputDir, 'nginx'));
+    await fs.writeFile(path.join(this.outputDir, 'nginx', 'nginx.conf'), nginxConf);
+    logger.success('nginx.conf 已生成');
   }
 
   async generateEntrypoint(config) {
