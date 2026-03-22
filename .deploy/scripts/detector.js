@@ -46,8 +46,44 @@ export class Detector {
   }
 
   async detectFrontend() {
-    // Will be implemented in Task 4
+    logger.step('检测前端技术栈...');
+
+    const searchDirs = this.result.structure === 'monorepo'
+      ? ['frontend', '.']
+      : ['.'];
+
+    for (const dir of searchDirs) {
+      const pkgPath = path.join(this.projectRoot, dir, 'package.json');
+      if (!await fs.pathExists(pkgPath)) continue;
+
+      const pkg = await fs.readJson(pkgPath);
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+      for (const [name, config] of Object.entries(FRONTEND_FRAMEWORKS)) {
+        if (deps[config.detect]) {
+          const result = {
+            framework: name,
+            type: config.type,
+            buildDir: config.buildDir,
+            buildCommand: this.detectBuildCommand(pkg.scripts),
+            directory: dir
+          };
+
+          logger.success(`前端: ${name} (${config.type})`);
+          return result;
+        }
+      }
+    }
+
     return null;
+  }
+
+  detectBuildCommand(scripts) {
+    if (!scripts) return 'npm run build';
+    if (scripts['build:prod']) return 'npm run build:prod';
+    if (scripts['build']) return 'npm run build';
+    if (scripts['dist']) return 'npm run dist';
+    return 'npm run build';
   }
 
   async detectBackend() {
