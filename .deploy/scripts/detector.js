@@ -87,8 +87,63 @@ export class Detector {
   }
 
   async detectBackend() {
-    // Will be implemented in Task 5
+    logger.step('检测后端技术栈...');
+
+    const searchDirs = this.result.structure === 'monorepo'
+      ? ['backend', '.']
+      : ['.'];
+
+    for (const dir of searchDirs) {
+      for (const [name, config] of Object.entries(BACKEND_FRAMEWORKS)) {
+        const detected = await this.detectBackendFramework(dir, config);
+        if (detected) {
+          const result = {
+            framework: name,
+            runtime: config.runtime,
+            port: config.port,
+            buildDir: config.buildDir,
+            buildCommand: await this.detectBackendBuildCommand(dir, name, config),
+            directory: dir
+          };
+
+          logger.success(`后端: ${name} (端口: ${config.port})`);
+          return result;
+        }
+      }
+    }
+
     return null;
+  }
+
+  async detectBackendFramework(dir, config) {
+    const detectFiles = Array.isArray(config.detect)
+      ? config.detect
+      : [config.detect];
+
+    for (const file of detectFiles) {
+      const filePath = path.join(this.projectRoot, dir, file);
+      if (await fs.pathExists(filePath)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async detectBackendBuildCommand(dir, name, config) {
+    if (name === 'java') {
+      const hasGradle = await fs.pathExists(path.join(this.projectRoot, dir, 'build.gradle'));
+      return hasGradle ? './gradlew build -x test' : 'mvn clean package -DskipTests';
+    }
+
+    if (name === 'nodejs') {
+      const pkgPath = path.join(this.projectRoot, dir, 'package.json');
+      if (await fs.pathExists(pkgPath)) {
+        const pkg = await fs.readJson(pkgPath);
+        return this.detectBuildCommand(pkg.scripts);
+      }
+    }
+
+    return config.buildCommand;
   }
 
   async detectProxy() {
