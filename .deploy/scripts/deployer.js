@@ -177,16 +177,18 @@ export class Deployer {
   }
 
   async buildImage(remoteDir, dockerConfig) {
-    logger.step('构建 Docker 镜像...');
-
     const { imageName, buildArgs = {} } = dockerConfig;
+
+    // Generate version tag
+    const version = Date.now().toString();
+    logger.step(`构建镜像: ${imageName}:${version}`);
 
     // Build args string
     const buildArgsStr = Object.entries(buildArgs)
       .map(([key, value]) => `--build-arg ${key}=${value}`)
       .join(' ');
 
-    const buildCmd = `cd ${remoteDir} && docker build ${buildArgsStr} -t ${imageName} .`;
+    const buildCmd = `cd ${remoteDir} && docker build -t ${imageName}:${version} -t ${imageName}:latest ${buildArgsStr} .`;
 
     const result = await this.ssh.execCommand(buildCmd);
 
@@ -194,7 +196,8 @@ export class Deployer {
       throw new Error(`Docker 构建失败: ${result.stderr}`);
     }
 
-    logger.success(`镜像构建完成: ${imageName}`);
+    logger.success(`镜像构建完成: ${imageName}:${version}`);
+    return version;
   }
 
   async stopContainer(imageName) {
@@ -223,7 +226,7 @@ export class Deployer {
   async startContainer(remoteDir, dockerConfig) {
     logger.step('启动新容器...');
 
-    const { imageName, containerName, ports = [], envVars = {} } = dockerConfig;
+    const { imageName, containerName, ports = [], envVars = {}, volumeMappings = [] } = dockerConfig;
 
     // Build docker run command
     let runCmd = `docker run -d`;
@@ -236,6 +239,14 @@ export class Deployer {
     // Port mappings
     for (const port of ports) {
       runCmd += ` -p ${port}`;
+    }
+
+    // Volume mappings
+    const volumeArgs = volumeMappings
+      .map(v => `-v ${v.host}:${v.container}`)
+      .join(' ');
+    if (volumeArgs) {
+      runCmd += ` ${volumeArgs}`;
     }
 
     // Environment variables
@@ -252,8 +263,9 @@ export class Deployer {
       throw new Error(`容器启动失败: ${result.stderr}`);
     }
 
-    const containerId = result.stdout.trim().substring(0, 12);
-    logger.success(`容器启动成功: ${containerId}`);
+    const containerId = result.stdout.trim();
+    logger.success(`容器启动成功: ${containerId.substring(0, 12)}`);
+    return containerId;
   }
 
   disconnect() {
