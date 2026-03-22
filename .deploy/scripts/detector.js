@@ -202,7 +202,42 @@ export class Detector {
   }
 
   display() {
-    // Will be implemented in Task 7
+    console.log('\n📊 项目检测结果\n');
+
+    // Structure
+    const structureNames = {
+      monorepo: '单体项目',
+      'frontend-only': '仅前端',
+      'backend-only': '仅后端',
+      single: '单一项目'
+    };
+    console.log(`项目结构：${structureNames[this.result.structure] || this.result.structure}`);
+
+    // Frontend
+    if (this.result.frontend) {
+      console.log('├── 前端：' +
+        `${this.result.frontend.framework} (${this.result.frontend.type})`);
+      console.log('│   └── 构建输出：' +
+        `${this.result.frontend.buildDir}/`);
+    }
+
+    // Backend
+    if (this.result.backend) {
+      console.log('├── 后端：' +
+        `${this.result.backend.framework} (${this.result.backend.runtime})`);
+      console.log('│   └── 构建输出：' +
+        `${this.result.backend.buildDir || '无'}`);
+    }
+
+    // Proxy
+    if (this.result.proxy) {
+      console.log('└── 代理配置：');
+      for (const [path, config] of Object.entries(this.result.proxy)) {
+        console.log(`    ├── ${path} → 后端服务`);
+      }
+    }
+
+    console.log('\n是否正确？[Y/n/修改]');
   }
 }
 
