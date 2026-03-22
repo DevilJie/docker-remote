@@ -207,8 +207,75 @@ export class Prompter {
     }
   }
 
+  /**
+   * 收集服务器信息
+   */
+  async collectServerInfo() {
+    logger.step('收集服务器配置...');
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'host',
+        message: '服务器 IP 地址',
+        validate: (input) => {
+          if (!input.trim()) return '请输入服务器 IP';
+          return true;
+        }
+      },
+      {
+        type: 'number',
+        name: 'port',
+        message: 'SSH 端口',
+        default: 22,
+        validate: (input) => {
+          if (input < 1 || input > 65535) return '端口范围: 1-65535';
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'username',
+        message: 'SSH 用户名',
+        default: 'root',
+        validate: (input) => {
+          if (!input.trim()) return '请输入用户名';
+          return true;
+        }
+      },
+      {
+        type: 'list',
+        name: 'authType',
+        message: '认证方式',
+        choices: [
+          { name: '密码', value: 'password' },
+          { name: 'SSH 密钥', value: 'key' }
+        ],
+        default: 'key'
+      },
+      {
+        type: 'input',
+        name: 'deployDir',
+        message: '部署目录',
+        default: '/opt/app',
+        validate: (input) => {
+          if (!input.trim()) return '请输入部署目录';
+          if (!input.startsWith('/')) return '请输入绝对路径';
+          return true;
+        }
+      }
+    ]);
+
+    return {
+      host: answers.host,
+      port: answers.port,
+      username: answers.username,
+      authType: answers.authType,
+      deployDir: answers.deployDir
+    };
+  }
+
   // 以下方法将在后续任务中实现
-  async collectServerInfo() { return {}; }
   async collectSecrets(authType) { return {}; }
   async collectDockerConfig(detectionResult) { return {}; }
   async promptSaveSecrets() { return false; }
