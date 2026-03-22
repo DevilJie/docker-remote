@@ -70,3 +70,52 @@ description: |
 5. **远程部署** - SSH 连接服务器，上传文件，构建镜像
 6. **健康检查** - 验证服务是否正常启动
 7. **完成** - 保存配置，展示结果
+
+## 设计原则
+
+### 本地构建优先 (Build Locally First)
+
+**所有编译/打包操作必须在本地完成，Dockerfile 只负责复制已构建的产物。**
+
+#### 为什么不在 Docker 内编译？
+
+| 问题 | Docker 内编译 | 本地构建 |
+|------|--------------|---------|
+| 构建缓存 | 每次都要重新下载依赖 | 本地 Maven/NPM 缓存 |
+| 镜像大小 | 包含编译工具 (Maven 500MB+) | 仅运行时 (JRE 150MB) |
+| 构建速度 | 慢 (每次重新编译) | 快 (增量编译) |
+| CI/CD | 复杂 (需要 Docker 缓存) | 简单 (标准构建流程) |
+| 调试 | 困难 (容器内环境) | 简单 (本地环境) |
+
+#### 正确的做法
+
+```bash
+# 1. 本地构建 (必须)
+mvn clean package -DskipTests     # Java
+npm run build                      # Node.js
+go build -o app                    # Go
+
+# 2. 生成 Dockerfile (只复制，不编译)
+# Dockerfile 会验证构建产物存在，否则报错
+```
+
+#### 错误的做法 (禁止)
+
+```dockerfile
+# ❌ 禁止：多阶段构建编译
+FROM maven:3.9 AS builder
+RUN mvn clean package  # 不允许！
+
+# ❌ 禁止：在 RUN 中编译
+RUN npm run build      # 不允许！
+```
+
+#### 正确的 Dockerfile 示例
+
+```dockerfile
+# ✅ 正确：只复制已构建的产物
+FROM nginx:alpine
+RUN apk add --no-cache openjdk17-jre-headless
+COPY backend/app.jar /var/app/jar/app.jar  # 复制本地已打包的 jar
+COPY frontend/ /var/www/html/              # 复制本地已构建的前端
+```
