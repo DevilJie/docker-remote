@@ -1,0 +1,205 @@
+{
+  "featureName": "docker-deploy-skill",
+  "createdAt": "2026-03-22",
+  "status": "pending",
+  "features": [
+    {
+      "id": "F001",
+      "devType": "fullstack",
+      "description": "Initialize Skill Directory Structure",
+      "steps": [
+        "Create .deploy directory structure",
+        "Create SKILL.md with basic metadata",
+        "Add .gitignore entry for secrets"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F002",
+      "devType": "fullstack",
+      "description": "Setup Node.js Package",
+      "steps": [
+        "Create package.json with dependencies",
+        "Create constants.js with framework configs",
+        "Install npm dependencies"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F003",
+      "devType": "fullstack",
+      "description": "Create Detector Module - Project Structure Detection",
+      "steps": [
+        "Create logger utility",
+        "Create detector.js structure",
+        "Implement detectStructure method"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F004",
+      "devType": "fullstack",
+      "description": "Implement Frontend Detection",
+      "steps": [
+        "Add detectFrontend method",
+        "Add detectBuildCommand helper",
+        "Test with different frontend frameworks"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F005",
+      "devType": "fullstack",
+      "description": "Implement Backend Detection",
+      "steps": [
+        "Add detectBackend method",
+        "Add detectBackendFramework helper",
+        "Add detectBackendBuildCommand helper"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F006",
+      "devType": "fullstack",
+      "description": "Implement Proxy Configuration Detection",
+      "steps": [
+        "Add detectProxy method",
+        "Add parseProxyConfig method with regex patterns",
+        "Support vite/vue/webpack config formats"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F007",
+      "devType": "fullstack",
+      "description": "Implement Detection Result Display",
+      "steps": [
+        "Add display method with formatted output",
+        "Show structure, frontend, backend, proxy info"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F008",
+      "devType": "fullstack",
+      "description": "Create Config Manager",
+      "steps": [
+        "Implement load/save methods",
+        "Implement saveSecrets/loadSecrets methods",
+        "Create default config generator"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F009",
+      "devType": "fullstack",
+      "description": "Create Generator Module - Dockerfile",
+      "steps": [
+        "Create generator.js structure",
+        "Implement generateDockerfile method",
+        "Add runtime install helpers"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F010",
+      "devType": "fullstack",
+      "description": "Implement Nginx Configuration Generation",
+      "steps": [
+        "Implement generateNginxConfig method",
+        "Generate static file serving config",
+        "Generate proxy rules from detected config"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F011",
+      "devType": "fullstack",
+      "description": "Implement Entrypoint Script Generation",
+      "steps": [
+        "Implement generateEntrypoint method",
+        "Add backend startup commands for each runtime",
+        "Handle environment variables"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F012",
+      "devType": "fullstack",
+      "description": "Create Builder Module",
+      "steps": [
+        "Implement build method",
+        "Implement buildFrontend with copy logic",
+        "Implement buildBackend for each runtime"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F013",
+      "devType": "fullstack",
+      "description": "Create Deployer Module - SSH Connection",
+      "steps": [
+        "Implement connect method with SSH2",
+        "Implement checkDocker method",
+        "Implement installDocker method"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F014",
+      "devType": "fullstack",
+      "description": "Implement File Upload and Docker Operations",
+      "steps": [
+        "Implement uploadFiles with SFTP",
+        "Implement buildImage method",
+        "Implement stopContainer and startContainer"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F015",
+      "devType": "fullstack",
+      "description": "Create Health Check Module",
+      "steps": [
+        "Implement check method",
+        "Implement checkContainerStatus",
+        "Implement httpHealthCheck with fallback paths",
+        "Implement rollback method"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F016",
+      "devType": "fullstack",
+      "description": "Create Main Entry Point",
+      "steps": [
+        "Create DockerDeploy class",
+        "Integrate all modules in run method",
+        "Add CLI entry point"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F017",
+      "devType": "fullstack",
+      "description": "Update SKILL.md with Complete Documentation",
+      "steps": [
+        "Add configuration documentation",
+        "Add module descriptions",
+        "Add error handling and examples"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F018",
+      "devType": "fullstack",
+      "description": "Final Verification",
+      "steps": [
+        "Verify all files exist",
+        "Run syntax check on all files",
+        "Final commit"
+      ],
+      "passes": false
+    }
+  ]
+}
