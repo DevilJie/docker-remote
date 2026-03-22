@@ -344,7 +344,105 @@ export class Prompter {
     return saveSecrets;
   }
 
+  /**
+   * 收集 Docker 配置
+   */
+  async collectDockerConfig(detectionResult) {
+    logger.step('收集 Docker 配置...');
+
+    const projectName = path.basename(this.projectRoot);
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'imageName',
+        message: 'Docker 镜像名称',
+        default: projectName,
+        validate: (input) => {
+          if (!input.trim()) return '请输入镜像名称';
+          if (!/^[a-z0-9][a-z0-9._-]*$/i.test(input)) {
+            return '镜像名称只能包含字母、数字、.、_、-';
+          }
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'containerName',
+        message: '容器名称',
+        default: `${projectName}-container`,
+        validate: (input) => {
+          if (!input.trim()) return '请输入容器名称';
+          return true;
+        }
+      },
+      {
+        type: 'input',
+        name: 'portMapping',
+        message: '端口映射 (主机端口:容器端口)',
+        default: '8080:80',
+        validate: (input) => {
+          if (!/^\d+:\d+$/.test(input)) return '格式: 主机端口:容器端口，如 8080:80';
+          return true;
+        }
+      },
+      {
+        type: 'confirm',
+        name: 'addMorePorts',
+        message: '是否添加更多端口映射?',
+        default: false
+      }
+    ]);
+
+    const portMappings = [this.parsePortMapping(answers.portMapping)];
+
+    // 添加更多端口映射
+    if (answers.addMorePorts) {
+      let addMore = true;
+      while (addMore) {
+        const extra = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'portMapping',
+            message: '额外端口映射 (留空结束)',
+            validate: (input) => {
+              if (!input) return true;
+              if (!/^\d+:\d+$/.test(input)) return '格式: 主机端口:容器端口';
+              return true;
+            }
+          },
+          {
+            type: 'confirm',
+            name: 'addMore',
+            message: '继续添加?',
+            default: false
+          }
+        ]);
+
+        if (extra.portMapping) {
+          portMappings.push(this.parsePortMapping(extra.portMapping));
+        }
+        addMore = extra.addMore && extra.portMapping;
+      }
+    }
+
+    return {
+      deployMode: 'single',
+      imageName: answers.imageName,
+      containerName: answers.containerName,
+      portMappings,
+      volumeMappings: []
+    };
+  }
+
+  /**
+   * 解析端口映射字符串
+   */
+  parsePortMapping(str) {
+    const [host, container] = str.split(':').map(Number);
+    return { host, container };
+  }
+
   // 以下方法将在后续任务中实现
-  async collectDockerConfig(detectionResult) { return {}; }
   async modifyConfig(config) { return config; }
 }
