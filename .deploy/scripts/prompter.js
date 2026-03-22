@@ -124,9 +124,90 @@ export class Prompter {
     console.log('');
   }
 
+  /**
+   * 确认检测结果
+   */
+  async confirmDetection(detectionResult) {
+    this.displayDetectionResult(detectionResult);
+
+    const { confirmed } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'confirmed',
+        message: '检测结果是否正确?',
+        choices: [
+          { name: '✅ 正确', value: true },
+          { name: '❌ 需要修改', value: false }
+        ],
+        default: 0
+      }
+    ]);
+
+    return confirmed;
+  }
+
+  /**
+   * 显示检测结果
+   */
+  displayDetectionResult(result) {
+    console.log('\n📊 项目检测结果\n');
+
+    const structureNames = {
+      monorepo: '单体项目',
+      'frontend-only': '仅前端',
+      'backend-only': '仅后端',
+      single: '单一项目'
+    };
+
+    console.log(`项目结构: ${structureNames[result.structure] || result.structure}`);
+
+    if (result.frontend) {
+      console.log(`├── 前端: ${result.frontend.framework} (${result.frontend.type})`);
+      console.log(`│   └── 构建输出: ${result.frontend.buildDir}/`);
+    }
+
+    if (result.backend) {
+      console.log(`├── 后端: ${result.backend.framework} (${result.backend.runtime})`);
+      console.log(`│   └── 构建输出: ${result.backend.buildDir || '无'}`);
+    }
+
+    if (result.proxy) {
+      const proxyPaths = Object.keys(result.proxy);
+      console.log(`└── 代理配置: ${proxyPaths.join(', ')}`);
+    }
+
+    console.log('');
+  }
+
+  /**
+   * 修改检测结果
+   */
+  async modifyDetection(detectionResult) {
+    // 简单实现：允许用户跳过前端或后端
+    const { skipFrontend, skipBackend } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'skipFrontend',
+        message: '是否跳过前端部署?',
+        default: false
+      },
+      {
+        type: 'confirm',
+        name: 'skipBackend',
+        message: '是否跳过后端部署?',
+        default: false
+      }
+    ]);
+
+    if (skipFrontend) {
+      detectionResult.frontend = null;
+    }
+    if (skipBackend) {
+      detectionResult.backend = null;
+    }
+  }
+
   // 以下方法将在后续任务中实现
-  async confirmDetection(detectionResult) { return true; }
-  async modifyDetection(detectionResult) {}
   async collectServerInfo() { return {}; }
   async collectSecrets(authType) { return {}; }
   async collectDockerConfig(detectionResult) { return {}; }
