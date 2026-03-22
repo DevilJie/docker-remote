@@ -443,6 +443,309 @@ export class Prompter {
     return { host, container };
   }
 
-  // 以下方法将在后续任务中实现
-  async modifyConfig(config) { return config; }
+  /**
+   * 修改配置
+   */
+  async modifyConfig(config) {
+    let modifiedConfig = JSON.parse(JSON.stringify(config)); // 深拷贝
+    let modifying = true;
+
+    while (modifying) {
+      const { module } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'module',
+          message: '选择要修改的配置模块',
+          choices: [
+            { name: '🖥️  服务器配置', value: 'server' },
+            { name: '🔨 构建配置', value: 'build', disabled: !modifiedConfig.project?.frontend && !modifiedConfig.project?.backend },
+            { name: '🐳 Docker 配置', value: 'docker' },
+            { name: '💚 健康检查', value: 'healthCheck' },
+            { name: '🔀 代理规则', value: 'proxy', disabled: !modifiedConfig.project?.proxy },
+            { name: '✅ 完成修改', value: 'done' }
+          ]
+        }
+      ]);
+
+      if (module === 'done') {
+        modifying = false;
+      } else {
+        switch (module) {
+          case 'server':
+            modifiedConfig = await this.modifyServerConfig(modifiedConfig);
+            break;
+          case 'build':
+            modifiedConfig = await this.modifyBuildConfig(modifiedConfig);
+            break;
+          case 'docker':
+            modifiedConfig = await this.modifyDockerConfig(modifiedConfig);
+            break;
+          case 'healthCheck':
+            modifiedConfig = await this.modifyHealthCheckConfig(modifiedConfig);
+            break;
+          case 'proxy':
+            modifiedConfig = await this.modifyProxyConfig(modifiedConfig);
+            break;
+        }
+      }
+    }
+
+    return modifiedConfig;
+  }
+
+  /**
+   * 修改服务器配置
+   */
+  async modifyServerConfig(config) {
+    const server = config.deploy?.server || {};
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'host',
+        message: '服务器 IP',
+        default: server.host || '',
+        validate: (input) => input.trim() ? true : '请输入服务器 IP'
+      },
+      {
+        type: 'number',
+        name: 'port',
+        message: 'SSH 端口',
+        default: server.port || 22
+      },
+      {
+        type: 'input',
+        name: 'username',
+        message: '用户名',
+        default: server.username || 'root'
+      },
+      {
+        type: 'list',
+        name: 'authType',
+        message: '认证方式',
+        choices: [
+          { name: '密码', value: 'password' },
+          { name: 'SSH 密钥', value: 'key' }
+        ],
+        default: server.authType || 'key'
+      },
+      {
+        type: 'input',
+        name: 'deployDir',
+        message: '部署目录',
+        default: server.deployDir || '/opt/app'
+      }
+    ]);
+
+    config.deploy = config.deploy || {};
+    config.deploy.server = answers;
+
+    return config;
+  }
+
+  /**
+   * 修改构建配置
+   */
+  async modifyBuildConfig(config) {
+    console.log('\n当前构建配置:');
+
+    if (config.project?.frontend) {
+      console.log(`  前端构建命令: ${config.project.frontend.buildCommand}`);
+      console.log(`  前端输出目录: ${config.project.frontend.buildDir}`);
+    }
+
+    if (config.project?.backend) {
+      console.log(`  后端构建命令: ${config.project.backend.buildCommand}`);
+      console.log(`  后端输出目录: ${config.project.backend.buildDir}`);
+    }
+
+    const choices = [];
+    if (config.project?.frontend) {
+      choices.push({ name: '前端构建命令', value: 'frontendCmd' });
+      choices.push({ name: '前端输出目录', value: 'frontendDir' });
+    }
+    if (config.project?.backend) {
+      choices.push({ name: '后端构建命令', value: 'backendCmd' });
+      choices.push({ name: '后端输出目录', value: 'backendDir' });
+    }
+
+    const { modifyWhich } = await inquirer.prompt([
+      {
+        type: 'checkbox',
+        name: 'modifyWhich',
+        message: '选择要修改的项',
+        choices
+      }
+    ]);
+
+    for (const item of modifyWhich) {
+      if (item === 'frontendCmd' && config.project?.frontend) {
+        const fc = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'buildCommand',
+            message: '前端构建命令',
+            default: config.project.frontend.buildCommand
+          }
+        ]);
+        config.project.frontend.buildCommand = fc.buildCommand;
+      } else if (item === 'frontendDir' && config.project?.frontend) {
+        const fd = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'buildDir',
+            message: '前端输出目录',
+            default: config.project.frontend.buildDir
+          }
+        ]);
+        config.project.frontend.buildDir = fd.buildDir;
+      } else if (item === 'backendCmd' && config.project?.backend) {
+        const bc = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'buildCommand',
+            message: '后端构建命令',
+            default: config.project.backend.buildCommand
+          }
+        ]);
+        config.project.backend.buildCommand = bc.buildCommand;
+      } else if (item === 'backendDir' && config.project?.backend) {
+        const bd = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'buildDir',
+            message: '后端输出目录',
+            default: config.project.backend.buildDir
+          }
+        ]);
+        config.project.backend.buildDir = bd.buildDir;
+      }
+    }
+
+    return config;
+  }
+
+  /**
+   * 修改 Docker 配置
+   */
+  async modifyDockerConfig(config) {
+    const docker = config.deploy?.docker || {};
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'imageName',
+        message: '镜像名称',
+        default: docker.imageName || path.basename(this.projectRoot)
+      },
+      {
+        type: 'input',
+        name: 'containerName',
+        message: '容器名称',
+        default: docker.containerName || `${path.basename(this.projectRoot)}-container`
+      },
+      {
+        type: 'input',
+        name: 'ports',
+        message: '端口映射 (逗号分隔，格式 host:container)',
+        default: docker.portMappings?.map(p => `${p.host}:${p.container}`).join(', ') || '8080:80'
+      }
+    ]);
+
+    config.deploy = config.deploy || {};
+    config.deploy.docker = {
+      ...docker,
+      imageName: answers.imageName,
+      containerName: answers.containerName,
+      portMappings: answers.ports.split(',').map(p => {
+        const [host, container] = p.trim().split(':').map(Number);
+        return { host, container };
+      })
+    };
+
+    return config;
+  }
+
+  /**
+   * 修改健康检查配置
+   */
+  async modifyHealthCheckConfig(config) {
+    const healthCheck = config.deploy?.healthCheck || {};
+
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'path',
+        message: '健康检查路径',
+        default: healthCheck.path || '/api/health'
+      }
+    ]);
+
+    config.deploy = config.deploy || {};
+    config.deploy.healthCheck = {
+      type: 'auto',
+      path: answers.path
+    };
+
+    return config;
+  }
+
+  /**
+   * 修改代理配置
+   */
+  async modifyProxyConfig(config) {
+    const proxy = config.project?.proxy || {};
+    const proxyPaths = Object.keys(proxy);
+
+    console.log('\n当前代理规则:');
+    proxyPaths.forEach(p => console.log(`  ${p} → 后端`));
+
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: '代理规则操作',
+        choices: [
+          { name: '添加代理', value: 'add' },
+          { name: '删除代理', value: 'remove', disabled: proxyPaths.length === 0 },
+          { name: '返回', value: 'back' }
+        ]
+      }
+    ]);
+
+    if (action === 'add') {
+      const newProxy = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'path',
+          message: '代理路径 (如 /api)',
+          validate: (input) => {
+            if (!input.trim()) return '请输入路径';
+            if (!input.startsWith('/')) return '路径必须以 / 开头';
+            return true;
+          }
+        }
+      ]);
+
+      config.project = config.project || {};
+      config.project.proxy = config.project.proxy || {};
+      config.project.proxy[newProxy.path] = { target: `http://localhost:${config.project?.backend?.port || 8080}` };
+
+    } else if (action === 'remove' && proxyPaths.length > 0) {
+      const { toRemove } = await inquirer.prompt([
+        {
+          type: 'checkbox',
+          name: 'toRemove',
+          message: '选择要删除的代理',
+          choices: proxyPaths.map(p => ({ name: p, value: p }))
+        }
+      ]);
+
+      for (const p of toRemove) {
+        delete config.project.proxy[p];
+      }
+    }
+
+    return config;
+  }
 }
