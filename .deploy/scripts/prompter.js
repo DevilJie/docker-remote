@@ -275,9 +275,76 @@ export class Prompter {
     };
   }
 
+  /**
+   * 收集敏感信息（密码/密钥）
+   */
+  async collectSecrets(authType) {
+    logger.step('收集认证信息...');
+
+    if (authType === 'password') {
+      const answers = await inquirer.prompt([
+        {
+          type: 'password',
+          name: 'password',
+          message: 'SSH 密码',
+          mask: '*',
+          validate: (input) => {
+            if (!input) return '请输入密码';
+            return true;
+          }
+        }
+      ]);
+
+      return {
+        password: answers.password,
+        keyPath: null,
+        passphrase: null
+      };
+    } else {
+      const answers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'keyPath',
+          message: 'SSH 私钥路径',
+          default: '~/.ssh/id_rsa',
+          validate: (input) => {
+            if (!input.trim()) return '请输入密钥路径';
+            return true;
+          }
+        },
+        {
+          type: 'password',
+          name: 'passphrase',
+          message: '密钥密码 (可选，留空表示无密码)',
+          mask: '*'
+        }
+      ]);
+
+      return {
+        password: null,
+        keyPath: answers.keyPath,
+        passphrase: answers.passphrase || null
+      };
+    }
+  }
+
+  /**
+   * 询问是否保存敏感信息
+   */
+  async promptSaveSecrets() {
+    const { saveSecrets } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'saveSecrets',
+        message: '是否保存认证信息供下次使用? (保存到 .deploy/.secrets.json)',
+        default: true
+      }
+    ]);
+
+    return saveSecrets;
+  }
+
   // 以下方法将在后续任务中实现
-  async collectSecrets(authType) { return {}; }
   async collectDockerConfig(detectionResult) { return {}; }
-  async promptSaveSecrets() { return false; }
   async modifyConfig(config) { return config; }
 }
