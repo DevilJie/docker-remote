@@ -147,8 +147,58 @@ export class Detector {
   }
 
   async detectProxy() {
-    // Will be implemented in Task 6
-    return null;
+    logger.step('检测代理配置...');
+
+    const proxyConfig = {};
+
+    for (const configFile of PROXY_CONFIG_FILES) {
+      const filePath = path.join(this.projectRoot, configFile);
+      if (!await fs.pathExists(filePath)) continue;
+
+      const content = await fs.readFile(filePath, 'utf-8');
+      const proxy = this.parseProxyConfig(content, configFile);
+
+      if (proxy && Object.keys(proxy).length > 0) {
+        Object.assign(proxyConfig, proxy);
+        break;
+      }
+    }
+
+    if (Object.keys(proxyConfig).length > 0) {
+      logger.success(`代理配置: ${Object.keys(proxyConfig).join(', ')}`);
+    }
+
+    return Object.keys(proxyConfig).length > 0 ? proxyConfig : null;
+  }
+
+  parseProxyConfig(content, filename) {
+    const proxy = {};
+
+    // Match proxy configuration patterns
+    const proxyPattern = /['"](\s*\/[\w-]+)['"]:\s*\{[^}]*target:\s*['"]([^'"]+)['"]/g;
+    let match;
+
+    while ((match = proxyPattern.exec(content)) !== null) {
+      const path = match[1].trim();
+      const target = match[2];
+      proxy[path] = { target };
+    }
+
+    // Alternative pattern for different config formats
+    const altPattern = /proxy:\s*\{([^}]+)\}/s;
+    const altMatch = content.match(altPattern);
+
+    if (altMatch && Object.keys(proxy).length === 0) {
+      const proxyBlock = altMatch[1];
+      const simplePattern = /['"](\s*\/[\w-]+)['"]:\s*['"]([^'"]+)['"]/g;
+
+      while ((match = simplePattern.exec(proxyBlock)) !== null) {
+        const path = match[1].trim();
+        proxy[path] = { target: match[2] };
+      }
+    }
+
+    return proxy;
   }
 
   display() {
