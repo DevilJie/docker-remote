@@ -60,3 +60,22 @@ export const HEALTH_CHECK_PATHS = [
   '/api/health',
   '/api/status'
 ];
+
+export const VOLUME_CONTAINER_PATHS = {
+  frontend: '/var/www/html/',
+  backend: {
+    java: '/var/app/jar/',
+    node: '/var/app/node/',
+    python: '/var/app/python/',
+    go: '/var/app/go/'
+  },
+  logs: {
+    nginx: '/var/log/nginx/',
+    backend: {
+      java: '/var/app/jar/logs/',
+      node: '/var/app/node/logs/',
+      python: '/var/app/python/logs/',
+      go: '/var/app/go/logs/'
+    }
+  }
+};

@@ -2,6 +2,7 @@
 import inquirer from 'inquirer';
 import path from 'path';
 import { logger } from './utils/logger.js';
+import { ConfigManager } from './config.js';
 
 export class Prompter {
   constructor(projectRoot = process.cwd()) {
@@ -107,11 +108,30 @@ export class Prompter {
     if (config.deploy?.docker) {
       console.log('【Docker】');
       console.log(`  镜像: ${config.deploy.docker.imageName}:latest`);
+      if (config.deploy.docker.containerName) {
+        console.log(`  容器: ${config.deploy.docker.containerName}`);
+      }
 
       const ports = config.deploy.docker.portMappings
         ?.map(p => `${p.host}:${p.container}`)
         .join(', ') || '无';
       console.log(`  端口: ${ports}`);
+      console.log('');
+    }
+
+    // 部署目录
+    if (config.deploy?.server?.deployDir) {
+      console.log('【部署目录】');
+      console.log(`  路径: ${config.deploy.server.deployDir}`);
+      console.log('');
+    }
+
+    // 卷映射
+    if (config.deploy?.docker?.volumeMappings?.length > 0) {
+      console.log('【卷映射】');
+      for (const v of config.deploy.docker.volumeMappings) {
+        console.log(`  ${v.host} → ${v.container} (${v.type || 'custom'})`);
+      }
       console.log('');
     }
 
@@ -143,7 +163,34 @@ export class Prompter {
       }
     ]);
 
+    // Java 后端：询问 JDK 版本
+    if (confirmed && detectionResult.backend?.runtime === 'java') {
+      await this.collectJavaVersion(detectionResult);
+    }
+
     return confirmed;
+  }
+
+  /**
+   * 收集 Java/JDK 版本
+   */
+  async collectJavaVersion(detectionResult) {
+    const { jdkVersion } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'jdkVersion',
+        message: '请选择 JDK 版本',
+        choices: [
+          { name: 'JDK 8', value: '8' },
+          { name: 'JDK 11', value: '11' },
+          { name: 'JDK 17', value: '17' },
+          { name: 'JDK 21', value: '21' }
+        ],
+        default: '17'
+      }
+    ]);
+
+    detectionResult.backend.jdkVersion = jdkVersion;
   }
 
   /**
@@ -213,6 +260,8 @@ export class Prompter {
   async collectServerInfo() {
     logger.step('收集服务器配置...');
 
+    const projectName = path.basename(this.projectRoot);
+
     const answers = await inquirer.prompt([
       {
         type: 'input',
@@ -256,11 +305,10 @@ export class Prompter {
       {
         type: 'input',
         name: 'deployDir',
-        message: '部署目录',
-        default: '/opt/app',
+        message: '服务器部署目录',
+        default: `~/app/${projectName}`,
         validate: (input) => {
           if (!input.trim()) return '请输入部署目录';
-          if (!input.startsWith('/')) return '请输入绝对路径';
           return true;
         }
       }
@@ -426,12 +474,16 @@ export class Prompter {
       }
     }
 
+    // 收集 volume 映射
+    const defaultVolumes = ConfigManager.getDefaultVolumeMappings(detectionResult);
+    const volumeMappings = await this.collectVolumeMappings(defaultVolumes);
+
     return {
       deployMode: 'single',
       imageName: answers.imageName,
       containerName: answers.containerName,
       portMappings,
-      volumeMappings: []
+      volumeMappings
     };
   }
 
@@ -441,6 +493,184 @@ export class Prompter {
   parsePortMapping(str) {
     const [host, container] = str.split(':').map(Number);
     return { host, container };
+  }
+
+  // ========== Volume Mapping Configuration ==========
+
+  /**
+   * 展示 volume 映射表格
+   */
+  displayVolumeMappings(mappings) {
+    console.log('\n📂 卷映射配置 (Volume Mappings)\n');
+    console.log('  序号  宿主机路径              →  容器路径                    类型');
+    console.log('  ────  ────────────────────────  ────────────────────────────  ──────────');
+    mappings.forEach((m, i) => {
+      const typeLabel = { frontend: '前端', backend: '后端', 'log-backend': '后端日志', 'log-nginx': 'Nginx日志', custom: '自定义' }[m.type] || m.type;
+      console.log(`  ${String(i + 1).padEnd(4)}  ${m.host.padEnd(24)} →  ${m.container.padEnd(28)} ${typeLabel}`);
+    });
+    console.log('');
+  }
+
+  /**
+   * 收集 volume 映射配置
+   * 展示默认映射，用户可确认或自定义修改
+   */
+  async collectVolumeMappings(defaultMappings) {
+    if (!defaultMappings || defaultMappings.length === 0) {
+      logger.info('未检测到需要映射的卷');
+      return [];
+    }
+
+    this.displayVolumeMappings(defaultMappings);
+
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: '卷映射配置',
+        choices: [
+          { name: '✅ 确认默认配置', value: 'confirm' },
+          { name: '✏️  修改映射路径', value: 'modify' },
+          { name: '➕ 添加自定义映射', value: 'add' },
+          { name: '⏭️  跳过（不使用卷映射）', value: 'skip' }
+        ],
+        default: 'confirm'
+      }
+    ]);
+
+    if (action === 'skip') {
+      return [];
+    }
+
+    if (action === 'confirm') {
+      return defaultMappings;
+    }
+
+    let mappings = JSON.parse(JSON.stringify(defaultMappings));
+
+    if (action === 'modify') {
+      mappings = await this.modifyVolumeMappings(mappings);
+    }
+
+    // 无论是否修改过，都询问是否要添加额外的自定义映射
+    const { addCustom } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'addCustom',
+        message: '是否添加额外的自定义卷映射?',
+        default: false
+      }
+    ]);
+
+    if (addCustom) {
+      const customMappings = await this.addCustomVolumeMappings();
+      mappings = mappings.concat(customMappings);
+    }
+
+    // 展示最终配置
+    this.displayVolumeMappings(mappings);
+
+    return mappings;
+  }
+
+  /**
+   * 修改已有的 volume 映射
+   */
+  async modifyVolumeMappings(mappings) {
+    const result = [];
+
+    for (let i = 0; i < mappings.length; i++) {
+      const m = mappings[i];
+      const typeLabel = { frontend: '前端', backend: '后端', 'log-backend': '后端日志', 'log-nginx': 'Nginx日志' }[m.type] || m.type;
+
+      console.log(`\n  [${i + 1}/${mappings.length}] ${typeLabel}映射`);
+
+      const { modifyThis } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'modifyThis',
+          message: `修改? (${m.host} → ${m.container})`,
+          default: false
+        }
+      ]);
+
+      if (modifyThis) {
+        const answers = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'host',
+            message: '宿主机路径 (相对于部署目录)',
+            default: m.host,
+            validate: (input) => input.trim() ? true : '请输入路径'
+          },
+          {
+            type: 'input',
+            name: 'container',
+            message: '容器路径',
+            default: m.container,
+            validate: (input) => {
+              if (!input.trim()) return '请输入路径';
+              if (!input.startsWith('/')) return '容器路径必须以 / 开头';
+              return true;
+            }
+          }
+        ]);
+
+        result.push({ ...m, host: answers.host, container: answers.container });
+      } else {
+        result.push(m);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 添加自定义 volume 映射
+   */
+  async addCustomVolumeMappings() {
+    const customMappings = [];
+    let addMore = true;
+
+    while (addMore) {
+      const answers = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'host',
+          message: '宿主机路径 (相对于部署目录)',
+          validate: (input) => input.trim() ? true : '请输入路径'
+        },
+        {
+          type: 'input',
+          name: 'container',
+          message: '容器路径',
+          validate: (input) => {
+            if (!input.trim()) return '请输入路径';
+            if (!input.startsWith('/')) return '容器路径必须以 / 开头';
+            return true;
+          }
+        }
+      ]);
+
+      customMappings.push({
+        host: answers.host,
+        container: answers.container,
+        type: 'custom'
+      });
+
+      const { continueAdd } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'continueAdd',
+          message: '继续添加?',
+          default: false
+        }
+      ]);
+
+      addMore = continueAdd;
+    }
+
+    return customMappings;
   }
 
   /**
@@ -652,6 +882,37 @@ export class Prompter {
       }
     ]);
 
+    // 询问是否修改卷映射
+    const currentVolumes = docker.volumeMappings || [];
+    if (currentVolumes.length > 0) {
+      this.displayVolumeMappings(currentVolumes);
+
+      const { editVolumes } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'editVolumes',
+          message: '是否修改卷映射?',
+          default: false
+        }
+      ]);
+
+      if (editVolumes) {
+        const volumeMappings = await this.collectVolumeMappings(currentVolumes);
+        config.deploy = config.deploy || {};
+        config.deploy.docker = {
+          ...docker,
+          imageName: answers.imageName,
+          containerName: answers.containerName,
+          portMappings: answers.ports.split(',').map(p => {
+            const [host, container] = p.trim().split(':').map(Number);
+            return { host, container };
+          }),
+          volumeMappings
+        };
+        return config;
+      }
+    }
+
     config.deploy = config.deploy || {};
     config.deploy.docker = {
       ...docker,
@@ -747,5 +1008,173 @@ export class Prompter {
     }
 
     return config;
+  }
+
+  // ========== New: Deploy Directory ==========
+
+  /**
+   * 询问宿主机部署目录
+   */
+  async promptDeployDir() {
+    const projectName = path.basename(this.projectRoot);
+    const defaultDir = `~/app/${projectName}`;
+
+    console.log('\n📂 宿主机部署目录配置\n');
+    console.log(`  将创建以下目录结构:`);
+    console.log(`  ${defaultDir}/volumes/frontend/  → /var/www/html/`);
+    console.log(`  ${defaultDir}/volumes/backend/   → /var/app/...`);
+    console.log(`  ${defaultDir}/volumes/logs/      → 日志目录\n`);
+
+    const { deployDir } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'deployDir',
+        message: '部署目录 (服务器上的根路径)',
+        default: defaultDir,
+        validate: (input) => {
+          if (!input.trim()) return '请输入部署目录';
+          return true;
+        }
+      }
+    ]);
+
+    return deployDir;
+  }
+
+  // ========== New: Port Conflict Resolution ==========
+
+  /**
+   * 端口冲突解决
+   * 返回: { resolvedPortMappings, processesToKill, cancelled }
+   */
+  async promptPortConflictResolution(conflicts) {
+    console.log('\n⚠️  端口冲突检测\n');
+
+    const resolvedPortMappings = [];
+    const processesToKill = [];
+
+    for (const conflict of conflicts) {
+      console.log(`端口 ${conflict.port} (→ 容器端口 ${conflict.containerPort}) 已被占用:`);
+      for (const proc of conflict.processes) {
+        console.log(`  PID: ${proc.pid}  进程: ${proc.name}`);
+        console.log(`  ${proc.command}`);
+      }
+      console.log('');
+
+      let resolved = false;
+
+      while (!resolved) {
+        const { action } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'action',
+            message: `端口 ${conflict.port} 被占用，请选择操作`,
+            choices: [
+              { name: '更换端口', value: 'change' },
+              { name: `终止占用进程 (PID: ${conflict.processes.map(p => p.pid).join(', ')})`, value: 'kill' },
+              { name: '取消部署', value: 'cancel' }
+            ]
+          }
+        ]);
+
+        if (action === 'cancel') {
+          return { resolvedPortMappings: [], processesToKill: [], cancelled: true };
+
+        } else if (action === 'change') {
+          const { newPort } = await inquirer.prompt([
+            {
+              type: 'number',
+              name: 'newPort',
+              message: '输入新的端口号',
+              validate: (input) => {
+                if (input < 1 || input > 65535) return '端口范围: 1-65535';
+                return true;
+              }
+            }
+          ]);
+
+          resolvedPortMappings.push({
+            host: newPort,
+            container: conflict.containerPort
+          });
+          resolved = true;
+
+        } else if (action === 'kill') {
+          for (const proc of conflict.processes) {
+            processesToKill.push(proc.pid);
+          }
+          resolvedPortMappings.push({
+            host: conflict.port,
+            container: conflict.containerPort
+          });
+          resolved = true;
+        }
+      }
+    }
+
+    return { resolvedPortMappings, processesToKill, cancelled: false };
+  }
+
+  // ========== New: Deploy Mode ==========
+
+  /**
+   * 询问部署模式（检测到已有容器时）
+   * 返回: 'quick' | 'full' | 'cancel'
+   */
+  async promptDeployMode(containerName) {
+    console.log(`\n📋 检测到已有部署容器 (${containerName})\n`);
+
+    const { mode } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'mode',
+        message: '请选择部署方式',
+        choices: [
+          { name: '快速更新 (仅更新 volumes 目录中的文件，重启容器)', value: 'quick' },
+          { name: '完整部署 (重建镜像和容器)', value: 'full' },
+          { name: '取消', value: 'cancel' }
+        ],
+        default: 'quick'
+      }
+    ]);
+
+    return mode;
+  }
+
+  // ========== Docker Installation ==========
+
+  /**
+   * 询问用户是否安装 Docker，以及镜像加速地址
+   * 返回: { install: boolean, mirrorUrl: string|null }
+   */
+  async promptDockerInstall() {
+    console.log('\n⚠️  服务器未安装 Docker\n');
+
+    const { install } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'install',
+        message: '是否在服务器上自动安装 Docker？（拒绝将终止部署）',
+        default: true
+      }
+    ]);
+
+    if (!install) {
+      return { install: false, mirrorUrl: null };
+    }
+
+    const { mirrorUrl } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'mirrorUrl',
+        message: 'Docker 镜像加速地址（留空跳过，如 https://mirror.ccs.tencentyun.com）',
+        default: ''
+      }
+    ]);
+
+    return {
+      install: true,
+      mirrorUrl: mirrorUrl.trim() || null
+    };
   }
 }
